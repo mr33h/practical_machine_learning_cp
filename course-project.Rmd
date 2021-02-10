@@ -1,0 +1,110 @@
+---
+title: "Practical Machine Learning Course Project"
+author: "Matthias Reeh"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(caret)
+library(randomForest)
+library(corrplot)
+library(rpart)
+library(rpart.plot)
+
+set.seed(29)
+```
+
+## Introduction
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: <http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har> (see the section on the Weight Lifting Exercise Dataset).
+
+## Data Preperation
+
+The first step is to load the data sets.
+
+```{r loadData}
+training_data <- read.csv('./pml-training.csv', header = T)
+validation_data <- read.csv('./pml-testing.csv', header = T)
+```
+
+The next step is to handle missing values.
+
+```{r clean}
+
+training_data <- training_data[,-nearZeroVar(training_data)]
+na <- sapply(training_data, function(x) mean(is.na(x))) > 0.95
+training_data <- training_data[, na==F]
+training_data <- training_data[, -(1:6)]
+
+```
+
+
+Then the data will be separated into a training data set (80%) and a test data set (20%).
+```{r splitData}
+
+inTrain <- createDataPartition(training_data$classe, p=0.8, list = F)
+train <- training_data[inTrain,]
+test <- training_data[-inTrain, ]
+
+```
+
+## Explorative Data Analysis
+To get an better understanding of the dataset a visualization of the corrolation matrix was performed.
+```{r corrAnalysis}
+
+corrolationMatrix <- cor(train[,-which(names(train) == "classe")])
+corrplot(corrolationMatrix, order = "FPC", method = "color", type = "lower", tl.cex = 0.8, tl.col = rgb(0, 0, 0))
+```
+
+## Modeling
+
+A Random Forest algorithm was used because of its robustness regarding to overfitting as well as to bias. A 3-fold cross validation was used to train the algorithm.
+
+
+```{r modeling}
+
+
+ctrl_rf <- trainControl(method = "cv", number=3, verboseIter=F)
+
+model_rf <- train(classe ~ ., data = train, method= "rf", trControl= ctrl_rf)
+
+
+model_rf$finalModel
+```
+
+## Evaluation
+
+The model was used to perform a prediction for the test data set to rate the performance of the model.
+
+```{r test}
+predict_model_rf <- predict(model_rf, newdata = test)
+confMatrix <- confusionMatrix(predict_model_rf, as.factor(test$classe))
+accuracy <- confMatrix$overall["Accuracy"]
+confMatrix
+```
+
+The accuracy of the prediction is `r paste0(round(accuracy * 100, 2), "%")`. Hence, the out-of-sample error is `r paste0(round(100 - accuracy * 100, 2), "%")`.
+
+
+## Validation
+Finaly the predictions for the validation data set were created.
+```{r validation}
+
+
+predict <- predict(model_rf, newdata = validation_data)
+
+```
+
+The figure below shows a visualiziaton of the decision tree. 
+
+```{r tree}
+tree <- rpart(classe ~ ., data=train, method="class")
+prp(tree)
+
+```
+
+
+
+
+
